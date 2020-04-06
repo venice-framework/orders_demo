@@ -206,8 +206,7 @@ services:
   postgres:
     # https://hub.docker.com/_/postgres
     # docker exec -it postgres psql --username=venice_user --dbname=MY_DB_NAME
-    #build: ./postgres
-    image: postgres:12
+    build: ./postgres
     container_name: postgres
     # exposes port 5432 by default
     expose:
