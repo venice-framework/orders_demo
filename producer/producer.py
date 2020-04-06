@@ -6,19 +6,11 @@ import requests
 import time
 
 from admin_api import CustomAdmin
+from order_faker import OrderFaker
 
 """
 This is an example with fake data intended to demonstrate basic
 functionality of the pipeline.
-
-The context is a bus updating its location in physical space as
-it moves.
-
-The key is bus_id and the values are lat and lng.
-
-Every event represents a location change.
-The latitude and longitude are changes by a constant value
-with every event.
 
 You must set the TOPIC_NAME environment variable.
 
@@ -33,7 +25,6 @@ For a version that serializes the key as a string, see the repo.
 BROKER = os.environ['BROKER']
 SCHEMA_REGISTRY_URL = os.environ['SCHEMA_REGISTRY_URL']
 TOPIC_NAME = os.environ['TOPIC_NAME']
-
 
 def delivery_report(err, msg):
     """
@@ -53,7 +44,7 @@ if not admin.topic_exists(TOPIC_NAME):
     admin.create_topics([TOPIC_NAME])
 
 # Define schemas
-# NOTE: bus_id is included in the value as a hacky workaround
+# NOTE: the key is included in the value as a hacky workaround
 # because ksql does not recognize avro-encoded keys and
 # AvroProducer does not allow a different encoding for keys at the
 # time of this writing.
@@ -64,14 +55,14 @@ value_schema = avro.loads("""
         "name": "value",
         "type": "record",
         "fields": [
-            {"name": "order_id", "type": "int", "doc": "order id"},
+            {"name": "order_id", "type": "int", "doc": "order_id"},
             {"name": "customer_id", "type": "int", "doc": "customer id"},
             {"name": "seller_id", "type": "int", "doc": "seller id"},
             {"name": "billing_id", "type": "int", "doc": "id of the billing method for the customer"},
             {"name": "shipping_address_id", "type": "int", "doc": "id of the shipping address for the customer"},
             {"name": "product_id", "type": "int", "doc": "product id"},
             {"name": "quantity", "type": "int", "doc": "how much of the product the customer wants"},
-            {"name": "price", "type": "float", "doc": "price"}
+            {"name": "price_in_cents", "type": "int", "doc": "price in cents. US currency"}
         ]
     }
 """)
@@ -101,23 +92,29 @@ avroProducer = AvroProducer(
     default_value_schema=value_schema
 )
 
-# Initialize key and values
-lat = 40.043152
-lng = -75.18071
-bus_id = 1
+# Initialize key and faker
+# Key will be implemented, to simulate each order having a unique id
+order_id = 1
 
-key = {"bus_id": 1}
+faker = OrderFaker({
+    'customer_id': {'min': 1, 'max': 1000},
+    'seller_id': {'min': 1, 'max': 1000},
+    'billing_id': {'min': 1, 'max': 5},
+    'shipping_address_id': {'min': 1, 'max': 10},
+    'product_id': {'min': 1, 'max': 10000},
+    'quantity': {'min': 1, 'max': 5},
+    'price_in_cents': {'min': 100, 'max': 10000}
+})
+
 
 # Produce events simulating bus movements, forever
 count = 1
 while True:
-    value = {
-        "bus_id": bus_id,
-        "lat": lat,
-        "lng": lng
-    }
+    key = {'order_id': order_id}
+    value = faker.order() 
+    value['order_id'] = order_id 
     avroProducer.produce(topic=TOPIC_NAME, value=value, key=key)
-    print("EVENT COUNT: {} key: {} lat: {}, lng: {}".format(count, key, lat, lng))
+    print("EVENT COUNT: {} key: {} value: {}".format(count, key, value))
     # Polls the producer for events and calls the corresponding callbacks
     # (if registered)
     #
@@ -128,8 +125,7 @@ while True:
     avroProducer.poll(timeout=0)
     time.sleep(0.3)
 
-    lat += 0.000001
-    lng += 0.000001
+    order_id += 1
     count += 1
 # Cleanup step: wait for all messages to be delivered before exiting.
 avroProducer.flush()
