@@ -36,15 +36,6 @@ class OrderFaker:
     def order(self):
         order = {}
         for key, value in self.fields.items():
-            if not (isinstance(key, str) and isinstance(value, dict)):
-                print("Error for key: {}. Key must be a str and value must be a dict".format(key))
-                continue
-            if not ('min' in value and 'max' in value):
-                print('Error for key: {}. Both min and max must be defined'.format(key))
-                continue
-            if not (isinstance(value["min"], int) and isinstance(value["max"], int)):
-                print('Error for key: {}. Both min and max must be integers.'.format(key))
-                continue
             # returns a random integer N such that min <= N <= max
             order[key] = random.randint(value["min"], value["max"]) 
         return order
